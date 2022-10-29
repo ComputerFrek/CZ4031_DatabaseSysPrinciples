@@ -9,8 +9,7 @@ from annotation import *
 
 # extract hard coded values
 FILE_CONFIG = "dbconfig.json"
-FILE_APP_THEME = "light_cyan_500.xml"  # list_themes()[12]
-
+FILE_APP_THEME = "dark_teal.xml"  # list_themes()[12]
 
 # allow use of with syntax
 class DatabaseCursor(object):
@@ -77,7 +76,7 @@ class Program():
                 return
             print("query: \n%s" % query)
             with DatabaseCursor(self.db_config) as cursor:
-                cursor.execute("EXPLAIN (FORMAT JSON) " + query)
+                cursor.execute("EXPLAIN (FORMAT JSON, BUFFERS, VERBOSE, SETTINGS) " + query)
                 plan = cursor.fetchall()
                 print("qep: \n%s" % plan)
                 plan_annotated = Annotator().wrapper(plan)

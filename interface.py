@@ -78,28 +78,3 @@ class UI(QMainWindow):
     def _onSchemaItemDoubleClicked(self, item, col):
         # append item text to input text area
         self.setInput(f"{self.readInput()} {item.text(col)} ")
-
-
-'''
-# maybe this part move to main script
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    apply_stylesheet(app, theme="light_cyan_500.xml")
-    window = UI()
-
-    # fake schema
-    schema = {
-        "tabel1":["item_1", "item_2", "item_3"],
-        "tabel2":["item_4", "item_5", "item_6"],
-        "tabel3":["item_7", "item_8", "item_9"],
-        "tabel4":["item_10", "item_11", "item_12"]
-    }
-    window.setSchema(schema)
-
-    # assigning callback
-    window.setOnClicked(
-        lambda: window.setResult( window.readInput() )
-    )
-    window.show()
-    sys.exit(app.exec_())
-'''
