@@ -1,5 +1,4 @@
 class Annotator:
-
     def __init__(self):
         self.iCount = 0
         self.stepCount = 0
