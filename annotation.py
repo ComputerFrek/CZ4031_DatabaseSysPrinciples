@@ -6,29 +6,39 @@ class Annotator:
     # wrapper function to do preprocessing on the qep and to only return finished string
     def wrapper(self, qep):
         # just to make it a bit nicer
+        print(f"Wrapper Plan: {qep[0][0][0]['Plan']}")
         final = self.annotate(qep[0][0][0]['Plan'], True)[1]
+        print(f"Final1: {final}")
         final = final[:-3]
+        print(f"Final2: {final}")
         final += " to get the final result."
         return final
 
     def annotate(self, query, first=False):
-
+        print(f"query: {query}")
         # for storing previous tables since they are not included in the qep
         joinTables = []
 
         # result string to be combined with current iter's output and returned
         result = ""
 
+        print(f"ann1")
         if "Plans" in query:
+            print(f"ann2: {query['Plans']}")
             for plan in query["Plans"]:
+                print(f"Calling annotate: {plan}")
                 temp = self.annotate(plan)
+                print(f"temp: {temp}")
+                print(f"before jointable: {temp[0]}")
                 joinTables.append(temp[0])
+                print(f"jointables: {joinTables}")
+                print(f"before result add: {temp[1]}")
                 result += temp[1]
 
         self.stepCount += 1
-        result += "Step {}: ".format(self.stepCount)
-
-        # python 3.8 has no switch function :(
+        result += f"Step {self.stepCount}: "
+        print(f"result: {result}")
+        print(f"query['Node Type']: {query['Node Type']}")
 
         if query["Node Type"] == 'Seq Scan':
             table = query["Relation Name"]
