@@ -1,6 +1,8 @@
 import psycopg2  # need install
 import json
 from annotation import *
+from deepdiff import DeepDiff
+from pprint import pprint
 
 class DatabaseCursor:
     def __init__(self):
@@ -66,18 +68,18 @@ class DatabaseCursor:
             #print(f"constrain: {constrain} value: {constraintsdict[constrain]}")
             self.cur.execute(f"SET {constrain} TO {constraintsdict[constrain]}")
 
-        print(f"query: EXPLAIN (FORMAT JSON, BUFFERS, VERBOSE, SETTINGS) {query}")
-        self.cur.execute(f"EXPLAIN (FORMAT JSON, BUFFERS, VERBOSE, SETTINGS) {query}")
-        #response = self.cur.fetchall()[0][0][0]
+        print(f"query: EXPLAIN (ANALYZE TRUE, FORMAT JSON, BUFFERS, WAL, TIMING, SUMMARY, VERBOSE, SETTINGS) {query}")
+        self.cur.execute(f"EXPLAIN (ANALYZE TRUE, FORMAT JSON, BUFFERS, WAL, TIMING, SUMMARY, VERBOSE, SETTINGS) {query}")
+        #response = self.cur.fetchall()
         response = self.cur.fetchall()[0][0][0]['Plan']
-        self.conn.close()
-
         #print(f"qep: {response}")
         #plan_annotated = Annotator().wrapper(response)
         #print(f"annotated qep: {plan_annotated}")
-        #self.window.setResult(plan_annotated)
+
+        self.conn.close()
 
         return response
+        #return plan_annotated
 
     def getallplans(self, query):
         allplans = []
@@ -110,42 +112,67 @@ class DatabaseCursor:
         allplans.append(chosenplan)
         print(f"Chosenplan: {chosenplan}")
 
-        self.decidewhattochange(chosenplan)
+        listtochange = []
+        self.decidewhattochange(listtochange, chosenplan)
+        print(f'listtochange: {listtochange}')
 
-        #print("getallplan2")
-        #constraintsdict["enable_hashjoin"] = "off"
-        #allplans.append(self.getplan(query, constraintsdict))
+        while len(listtochange) >= 1:
+            item = listtochange.pop()
+            constraintsdict[item] = "off"
+            plan = self.getplan(query, constraintsdict)
+            self.decidewhattochange(listtochange, plan)
+            allplans.append(plan)
+            #constraintsdict[item] = "on"
+
         return allplans
 
-    def decidewhattochange(self, masterplan, first=False):
-        listtochange = []
+    def decidewhattochange(self, listtochange, masterplan, first=False):
+        jointables = []
 
-        print(f'decide1')
+        #print(f'decide1')
         if "Plans" in masterplan:
-            print(f"decide2: {masterplan}")
+            #print(f"decide2: {masterplan}")
             for plan in masterplan["Plans"]:
-                print(f"recursive call: {plan}")
-                temp = self.decidewhattochange(plan)
+                #print(f"recursive call: {plan}")
+                temp = self.decidewhattochange(listtochange, plan)
+                #print(f'jointable append: {temp}')
+                jointables.append(temp)
 
         if masterplan["Node Type"] == 'Seq Scan':
             table = masterplan["Relation Name"]
             name = masterplan["Alias"]
             print(f'Reach SeqScan Table: {table} Name: {name}')
-            return
+            return table
         elif masterplan["Node Type"] == 'Index Scan':
             table = masterplan["Relation Name"]
             name = masterplan["Alias"]
             print(f'Reach IndexScan Table: {table} Name: {name}')
-            return
+            return table
+        elif masterplan["Node Type"] == 'Hash Join':
+            condition = masterplan['Hash Cond']
+            print(f'Reach Hash Join: {jointables[0]} & {jointables[1]} using {condition}')
+            if not 'enable_hashjoin' in listtochange:
+                listtochange.append('enable_hashjoin')
+            return f'hj_it_{jointables[0]}_{jointables[1]}'
+        elif masterplan["Node Type"] == 'Merge Join':
+            condition = masterplan['Merge Cond']
+            print(f'Reach Merge Join: {jointables[0]} & {jointables[1]} using {condition}')
+            if not 'enable_mergejoin' in listtochange:
+                listtochange.append('enable_mergejoin')
+            return f'mj_it_{jointables[0]}_{jointables[1]}'
+        elif masterplan["Node Type"] == 'Hash':
+            print(f'Reach Hash: {jointables[0]}')
+            return jointables[0]
         else:
             print(f'Reach Else Masterplan: {masterplan}')
 
-    def analyzeplan(self, plan, head=False):
-        print("analyzeplan1")
-        if "Plan" in plan or "Plans" in plan:
-            print("analyzeplan2")
-            for item in plan["Plans"]:
-                print("analyzeplan3")
-                #child = self.analyzeplan(item)
-                print(f'item: {item} value: {plan["Plans"]["item"]}')
+    def compareplans(self, plans):
+        bestplan = plans[0]
+
+        #dict_you_want = { "Node Type": bestplan["Node Type"] for "your_key" in your_keys }
+
+        diff = DeepDiff(bestplan, plans[1])
+        pprint(diff, indent=2)
+        diff2 = DeepDiff(bestplan, plans[2])
+        pprint(diff2, indent=2)
 

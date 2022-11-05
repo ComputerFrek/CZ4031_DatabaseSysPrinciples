@@ -53,11 +53,15 @@ class Program:
                 return
 
             response = self.DatabaseCur.getallplans(query)
-            #i = 0
+
+            i = 0
             #print(f"Output:\n{response}")
-            #for item in response:
-                #print(f"{i}: {item}")
-                #i = i + 1
+            for item in response:
+                print(f"Plan {i}: {item}")
+                i = i + 1
+
+            print("Comparing plans")
+            self.DatabaseCur.compareplans(response)
 
             #self.window.setResult(response)
 
