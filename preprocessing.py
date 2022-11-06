@@ -25,10 +25,8 @@ class DatabaseCursor:
 
         self.conn.close()
 
-        # parse response as dictionary
         schema = {}
         for item in response:
-            # cols are table_name, column_name, data_type, length (nullable)
             attrs = schema.get(item[0], [])
             attrs.append(item[1])
             schema[item[0]] = attrs
@@ -55,16 +53,10 @@ class DatabaseCursor:
         #print(f"query: EXPLAIN (ANALYZE TRUE, FORMAT JSON, BUFFERS, WAL, TIMING, SUMMARY, VERBOSE, SETTINGS) {query}")
         print(f"query: EXPLAIN (FORMAT JSON, BUFFERS, SUMMARY, VERBOSE, SETTINGS) {query}")
         self.cur.execute(f"EXPLAIN (FORMAT JSON, BUFFERS, SUMMARY, VERBOSE, SETTINGS) {query}")
-        #response = self.cur.fetchall()
         response = self.cur.fetchall()[0][0][0]['Plan']
-        #print(f"qep: {response}")
-        #plan_annotated = Annotator().wrapper(response)
-        #print(f"annotated qep: {plan_annotated}")
-
         self.conn.close()
 
         return response
-        #return plan_annotated
 
     def getallplans(self, query):
         allplans = []
