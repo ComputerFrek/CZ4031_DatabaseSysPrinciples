@@ -9,22 +9,6 @@ class DatabaseCursor:
         with open("dbconfig.json", "r") as file:
             self.config = json.load(file)
 
-    #def __enter__(self):
-    #    self.conn = psycopg2.connect(
-    #        host=self.config["host"],
-    #        dbname=self.config["dbname"],
-    #        user=self.config["user"],
-    #        password=self.config["pwd"],
-    #        port=self.config["port"]
-    #    )
-    #    self.cur = self.conn.cursor()
-        # self.cur.execute("SET search_path TO " + self.config['schema'])
-    #    return self.cur
-
-    #def __exit__(self, exc_type, exc_val, exc_tb):
-    #    # some logic to commit/rollback
-    #    self.conn.close()
-
     def getschema(self):
         self.conn = psycopg2.connect(
             host=self.config["host"],
@@ -227,22 +211,6 @@ class DatabaseCursor:
             return plan['Index Cond']
         else:
             return
-
-    def compareplans(self, plans):
-        #dict_you_want = { "Node Type": bestplan["Node Type"] for "your_key" in your_keys }
-        #diff = DeepDiff(bestplan, plans[1])
-        #pprint(diff, indent=2)
-        #diff2 = DeepDiff(bestplan, plans[2])
-        #pprint(diff2, indent=2)
-
-        ds = plans[0] | grep(".*Cond", use_regexp=True)
-        pprint(ds)
-        condition = ds['matched_paths'][0]
-        pprint(condition)
-
-        for plan in plans[1:]:
-            ds = plan | grep (".*Cond", use_regexp=True)
-            pprint(ds)
 
 
 
