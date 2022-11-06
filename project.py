@@ -4,9 +4,12 @@ import json
 import psycopg2  # need install
 from PyQt5.QtWidgets import QApplication  # need install
 from qt_material import apply_stylesheet  # , list_themes # need install
+
+import annotation
 from interface import *
 from annotation import *
 from preprocessing import *
+from pprint import pprint
 
 # extract hard coded values
 FILE_APP_THEME = "dark_teal.xml"  # list_themes()[12]
@@ -56,17 +59,20 @@ class Program:
 
             i = 0
             #print(f"Output:\n{response}")
-            for item in response:
+            #pprint(response[0])
+            for item in response[0]:
                 print(f"Plan {i}: {item}")
                 i = i + 1
 
-            print("Comparing plans")
-            self.DatabaseCur.compareplans(response)
+            pprint(response[1], indent=2)
 
-            #self.window.setResult(response)
+            annotationstring = Annotator().annotate2(response[1])
+            self.window.setResult(annotationstring)
 
+            #print("Comparing plans")
+            #self.DatabaseCur.compareplans(response)
         except Exception as e:
-            print(str(e))
+            print(f'Error: {str(e)}, ErrorType: {type(e)}')
             self.window.showError("Unable to analyse query!", e)
 
     def updateSchema(self):

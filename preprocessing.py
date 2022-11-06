@@ -1,7 +1,7 @@
 import psycopg2  # need install
 import json
 from annotation import *
-from deepdiff import DeepDiff
+from deepdiff import DeepDiff, grep
 from pprint import pprint
 
 class DatabaseCursor:
@@ -68,8 +68,9 @@ class DatabaseCursor:
             #print(f"constrain: {constrain} value: {constraintsdict[constrain]}")
             self.cur.execute(f"SET {constrain} TO {constraintsdict[constrain]}")
 
-        print(f"query: EXPLAIN (ANALYZE TRUE, FORMAT JSON, BUFFERS, WAL, TIMING, SUMMARY, VERBOSE, SETTINGS) {query}")
-        self.cur.execute(f"EXPLAIN (ANALYZE TRUE, FORMAT JSON, BUFFERS, WAL, TIMING, SUMMARY, VERBOSE, SETTINGS) {query}")
+        #print(f"query: EXPLAIN (ANALYZE TRUE, FORMAT JSON, BUFFERS, WAL, TIMING, SUMMARY, VERBOSE, SETTINGS) {query}")
+        print(f"query: EXPLAIN (FORMAT JSON, BUFFERS, SUMMARY, VERBOSE, SETTINGS) {query}")
+        self.cur.execute(f"EXPLAIN (FORMAT JSON, BUFFERS, SUMMARY, VERBOSE, SETTINGS) {query}")
         #response = self.cur.fetchall()
         response = self.cur.fetchall()[0][0][0]['Plan']
         #print(f"qep: {response}")
@@ -83,6 +84,7 @@ class DatabaseCursor:
 
     def getallplans(self, query):
         allplans = []
+        planscost = {}
 
         constraintsdict = {
             "enable_async_append": "on",
@@ -113,20 +115,23 @@ class DatabaseCursor:
         print(f"Chosenplan: {chosenplan}")
 
         listtochange = []
-        self.decidewhattochange(listtochange, chosenplan)
+        self.decidewhattochange(listtochange, chosenplan, planscost, True)
         print(f'listtochange: {listtochange}')
 
         while len(listtochange) >= 1:
             item = listtochange.pop()
             constraintsdict[item] = "off"
             plan = self.getplan(query, constraintsdict)
-            self.decidewhattochange(listtochange, plan)
+            print(f"Alternate Plan: {plan}")
+            self.decidewhattochange(listtochange, plan, planscost, False)
             allplans.append(plan)
             #constraintsdict[item] = "on"
 
-        return allplans
+        #pprint(planscost)
 
-    def decidewhattochange(self, listtochange, masterplan, first=False):
+        return allplans, planscost
+
+    def decidewhattochange(self, listtochange, masterplan, cost, bestplan=True, first=False):
         jointables = []
 
         #print(f'decide1')
@@ -134,45 +139,111 @@ class DatabaseCursor:
             #print(f"decide2: {masterplan}")
             for plan in masterplan["Plans"]:
                 #print(f"recursive call: {plan}")
-                temp = self.decidewhattochange(listtochange, plan)
+                temp = self.decidewhattochange(listtochange, plan, cost, bestplan)
                 #print(f'jointable append: {temp}')
                 jointables.append(temp)
+
+        if bestplan == True and not 'tables' in cost:
+            cost["tables"] = {}
 
         if masterplan["Node Type"] == 'Seq Scan':
             table = masterplan["Relation Name"]
             name = masterplan["Alias"]
+            if bestplan == True:
+                cost["tables"][table] = "Seq Scan"
             print(f'Reach SeqScan Table: {table} Name: {name}')
             return table
+
         elif masterplan["Node Type"] == 'Index Scan':
             table = masterplan["Relation Name"]
             name = masterplan["Alias"]
+            if bestplan == True:
+                cost["tables"][table] = "Index Scan"
             print(f'Reach IndexScan Table: {table} Name: {name}')
             return table
-        elif masterplan["Node Type"] == 'Hash Join':
-            condition = masterplan['Hash Cond']
-            print(f'Reach Hash Join: {jointables[0]} & {jointables[1]} using {condition}')
-            if not 'enable_hashjoin' in listtochange:
-                listtochange.append('enable_hashjoin')
-            return f'hj_it_{jointables[0]}_{jointables[1]}'
-        elif masterplan["Node Type"] == 'Merge Join':
-            condition = masterplan['Merge Cond']
-            print(f'Reach Merge Join: {jointables[0]} & {jointables[1]} using {condition}')
-            if not 'enable_mergejoin' in listtochange:
-                listtochange.append('enable_mergejoin')
-            return f'mj_it_{jointables[0]}_{jointables[1]}'
+
         elif masterplan["Node Type"] == 'Hash':
             print(f'Reach Hash: {jointables[0]}')
             return jointables[0]
+
+        elif masterplan["Node Type"] == 'Hash Join':
+            condition = masterplan['Hash Cond']
+            if bestplan == True:
+                cost[condition] = {'bestplan': 'Hash Join'}
+                cost[condition]['cost'] = {}
+            cost[condition]['cost']['Hash Join'] = masterplan['Total Cost']
+            if not 'enable_hashjoin' in listtochange:
+                listtochange.append('enable_hashjoin')
+            print(f'Reach Hash Join: {jointables[0]} & {jointables[1]} using {condition}')
+            return f'hj_it_{jointables[0]}_{jointables[1]}'
+
+        elif masterplan["Node Type"] == 'Merge Join':
+            condition = masterplan['Merge Cond']
+            if not condition in cost.keys():
+                print(f"Cannot find condition, likely need swap")
+                cond = condition.lstrip('(').rstrip(')')
+                condarr = cond.split('=')
+                condition = f"({condarr[1].strip()} = {condarr[0].strip()})"
+            if bestplan == True:
+                cost[condition] = {'bestplan': 'Merge Join'}
+                cost[condition]['cost'] = {}
+            cost[condition]['cost']['Merge Join'] = masterplan['Total Cost']
+            if not 'enable_mergejoin' in listtochange:
+                listtochange.append('enable_mergejoin')
+            print(f'Reach Merge Join: {jointables[0]} & {jointables[1]} using {condition}')
+            return f'mj_it_{jointables[0]}_{jointables[1]}'
+
+        elif masterplan["Node Type"] == 'Nested Loop':
+            #print("In nested loop")
+            condition = self.getnestedloopcond(masterplan)
+            #print(f'NL Condition: {condition}')
+            if not condition in cost.keys():
+                print(f"Cannot find condition, likely need swap")
+                cond = condition.lstrip('(').rstrip(')')
+                condarr = cond.split('=')
+                condition = f"({condarr[1].strip()} = {condarr[0].strip()})"
+            if bestplan == True:
+                cost[condition] = {'bestplan': 'Nested Loop'}
+                cost[condition]['cost'] = {}
+            cost[condition]['cost']['Nested Loop'] = masterplan['Total Cost']
+            print(f'Reach Nested Loop: {jointables[0]} & {jointables[1]} using {condition}')
+            return f'nl_it_{jointables[0]}_{jointables[1]}'
+
         else:
             print(f'Reach Else Masterplan: {masterplan}')
 
+    def getnestedloopcond(self, plan):
+        if "Plans" in plan:
+            for plan in plan["Plans"]:
+                temp = self.getnestedloopcond(plan)
+                if not temp == None:
+                    return temp
+
+        #print(f'getnlcond plan: {plan}')
+        #print(f'plan["Node Type"]: {plan["Node Type"]} and {plan.keys()}')
+        if plan["Node Type"] == 'Index Scan' and 'Index Cond' in plan.keys():
+            #print(f"index cond here getnested plan: {plan}")
+            #print(f"index cond: {plan['Index Cond']}")
+            return plan['Index Cond']
+        else:
+            return
+
     def compareplans(self, plans):
-        bestplan = plans[0]
-
         #dict_you_want = { "Node Type": bestplan["Node Type"] for "your_key" in your_keys }
+        #diff = DeepDiff(bestplan, plans[1])
+        #pprint(diff, indent=2)
+        #diff2 = DeepDiff(bestplan, plans[2])
+        #pprint(diff2, indent=2)
 
-        diff = DeepDiff(bestplan, plans[1])
-        pprint(diff, indent=2)
-        diff2 = DeepDiff(bestplan, plans[2])
-        pprint(diff2, indent=2)
+        ds = plans[0] | grep(".*Cond", use_regexp=True)
+        pprint(ds)
+        condition = ds['matched_paths'][0]
+        pprint(condition)
+
+        for plan in plans[1:]:
+            ds = plan | grep (".*Cond", use_regexp=True)
+            pprint(ds)
+
+
+
 
