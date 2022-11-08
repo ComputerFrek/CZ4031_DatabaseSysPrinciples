@@ -7,6 +7,7 @@ from qt_material import apply_stylesheet  # , list_themes # need install
 
 import annotation
 from interface import *
+from demo import * #wj
 from annotation import *
 from preprocessing import *
 from pprint import pprint
@@ -20,7 +21,8 @@ class Program:
         self.DatabaseCur = DatabaseCursor()
         self.app = QApplication(sys.argv)
         apply_stylesheet(self.app, theme=FILE_APP_THEME)
-        self.window = UI()
+        # self.window = UI() #O2
+        self.window = demo() #wj 
         self.window.setOnDatabaseChanged(lambda: self.onDatabaseChanged())
         self.window.setOnAnalyseClicked(lambda: self.analyseQuery())
 
@@ -46,6 +48,7 @@ class Program:
         return True
 
     def analyseQuery(self):
+        self.window.clearQEPQuery()
         if not self.hasDbConfig():
             self.window.showError("Database configuration is not found")
             return
