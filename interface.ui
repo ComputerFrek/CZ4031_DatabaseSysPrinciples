@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>CZ4031 Database System Principles</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <widget class="QGroupBox" name="groupBoxSchema">
@@ -115,7 +115,7 @@
      </rect>
     </property>
     <property name="title">
-     <string>QEP</string>
+     <string>Analysis Result(s)</string>
     </property>
     <widget class="QLabel" name="out_query">
      <property name="geometry">

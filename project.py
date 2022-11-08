@@ -1,13 +1,7 @@
 import sys
-import time
-import json
-import psycopg2  # need install
-from PyQt5.QtWidgets import QApplication  # need install
-from qt_material import apply_stylesheet  # , list_themes # need install
-
-import annotation
+from PyQt5.QtWidgets import QApplication
+from qt_material import apply_stylesheet
 from interface import *
-from demo import * #wj
 from annotation import *
 from preprocessing import *
 from pprint import pprint
@@ -21,10 +15,9 @@ class Program:
         self.DatabaseCur = DatabaseCursor()
         self.app = QApplication(sys.argv)
         apply_stylesheet(self.app, theme=FILE_APP_THEME)
-        # self.window = UI() #O2
-        self.window = demo() #wj 
+        self.window = AppGUI()
         self.window.setOnDatabaseChanged(lambda: self.onDatabaseChanged())
-        self.window.setOnAnalyseClicked(lambda: self.analyseQuery())
+        self.window.btnExecOnClick(lambda: self.analyseQuery())
 
     def run(self):
         self.window.show()
@@ -53,9 +46,10 @@ class Program:
             self.window.showError("Database configuration is not found")
             return
         try:
-            query = self.window.readInput()
+            query = self.window.getQueryInput()
             if not query:
-                print("query is empty")
+                #print("query is empty")
+                self.window.showError("Your input is empty! Please enter a valid SQL Query.", None)
                 return
 
             response = self.DatabaseCur.getallplans(query)
@@ -70,7 +64,7 @@ class Program:
             pprint(response[1], indent=2)
 
             annotationstring = Annotator().annotate2(response[1])
-            self.window.setResult(annotationstring)
+            self.window.setAnalysisResult(annotationstring)
 
             #print("Comparing plans")
             #self.DatabaseCur.compareplans(response)
