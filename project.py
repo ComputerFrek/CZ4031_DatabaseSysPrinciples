@@ -22,20 +22,18 @@ class Program:
     def run(self):
         self.window.show()
         list_db = list(self.DatabaseCur.config.keys())
-        print(f"List of database configs from json file: {list_db}")
+        print(f"JSON FILE DB CONFIG: {list_db}")
         self.window.setListDatabase(list_db)
         sys.exit(self.app.exec_())
 
     def onDatabaseChanged(self):
         # check cur database, update schema?
         cur_db = self.window.list_database.currentText()
-        print(f"Current selected database is {cur_db}")
+        print(f"DB Selected: {cur_db}")
         self.DatabaseCur.config = self.DatabaseCur.config[cur_db]
         self.updateSchema()
 
     def hasDbConfig(self):
-        #if not hasattr(self, "db_config"):
-        #    return False
         if self.DatabaseCur.config == None:
             return False
         return True
@@ -43,47 +41,39 @@ class Program:
     def analyseQuery(self):
         self.window.clearQEPQuery()
         if not self.hasDbConfig():
-            self.window.showError("Database configuration is not found")
+            self.window.showError("Cannot find DB config")
             return
         try:
             query = self.window.getQueryInput()
             if not query:
-                #print("query is empty")
-                self.window.showError("Your input is empty! Please enter a valid SQL Query.", None)
+                self.window.showError("Invalid SQL Query", None)
                 return
 
             response = self.DatabaseCur.getallplans(query)
 
             i = 0
-            #print(f"Output:\n{response}")
-            #pprint(response[0])
             for item in response[0]:
                 print(f"Plan {i}: {item}")
                 i = i + 1
 
-            pprint(response[1], indent=2)
+            #pprint(response[1], indent=2)
 
-            annotationstring = Annotator().annotate2(response[1])
+            annotationstring = Annotator().annotate(response[1])
             self.window.setAnalysisResult(annotationstring)
-
-            #print("Comparing plans")
-            #self.DatabaseCur.compareplans(response)
         except Exception as e:
-            print(f'Error: {str(e)}, ErrorType: {type(e)}')
-            self.window.showError("Unable to analyse query!", e)
+            #print(f'Error: {str(e)}, ErrorType: {type(e)}')
+            self.window.showError(f'Error: {str(e)}, ErrorType: {type(e)}')
 
     def updateSchema(self):
         if not self.hasDbConfig():
             self.window.setSchema(None)
-            self.window.showError("Database configuration is not found")
+            self.window.showError("Unable to find DB Config")
             return
         try:
             self.window.setSchema(self.DatabaseCur.getschema())
         except Exception as e:
             print(str(e))
-            self.window.showError("Unable to retrieve schema information!", e)
-
+            self.window.showError(f'Error: {str(e)}, ErrorType: {type(e)}')
 
 if __name__ == "__main__":
     Program().run()
-

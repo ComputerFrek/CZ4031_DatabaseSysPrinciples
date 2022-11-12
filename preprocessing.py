@@ -1,14 +1,15 @@
 import psycopg2  # need install
 import json
 from annotation import *
-from deepdiff import DeepDiff, grep
 from pprint import pprint
 
 class DatabaseCursor:
+    #Init the DB
     def __init__(self):
         with open("dbconfig.json", "r") as file:
             self.config = json.load(file)
 
+    #Get all the tables from the DB
     def getschema(self):
         self.conn = psycopg2.connect(
             host=self.config["host"],
@@ -36,7 +37,9 @@ class DatabaseCursor:
             print(t + 1, table, schema.get(table))
         return schema
 
+    #Gets a single plan with defined constraints
     def getplan(self, query, constraintsdict):
+        #Connect to DB
         self.conn = psycopg2.connect(
             host=self.config["host"],
             dbname=self.config["dbname"],
@@ -46,11 +49,11 @@ class DatabaseCursor:
         )
         self.cur = self.conn.cursor()
 
+        #SET the contraints before querying
         for constrain in constraintsdict:
-            #print(f"constrain: {constrain} value: {constraintsdict[constrain]}")
             self.cur.execute(f"SET {constrain} TO {constraintsdict[constrain]}")
 
-        #print(f"query: EXPLAIN (ANALYZE TRUE, FORMAT JSON, BUFFERS, WAL, TIMING, SUMMARY, VERBOSE, SETTINGS) {query}")
+        #Run the explain query & get the output
         print(f"query: EXPLAIN (FORMAT JSON, BUFFERS, SUMMARY, VERBOSE, SETTINGS) {query}")
         self.cur.execute(f"EXPLAIN (FORMAT JSON, BUFFERS, SUMMARY, VERBOSE, SETTINGS) {query}")
         response = self.cur.fetchall()[0][0][0]['Plan']
@@ -62,6 +65,7 @@ class DatabaseCursor:
         allplans = []
         planscost = {}
 
+        #Have all constraints turned on.
         constraintsdict = {
             "enable_async_append": "on",
             "enable_bitmapscan": "on",
@@ -85,38 +89,37 @@ class DatabaseCursor:
             "enable_tidscan": "on"
         }
 
+        #Get the QEP first
         print("Getting chosenplan")
         chosenplan = self.getplan(query, constraintsdict)
         allplans.append(chosenplan)
         print(f"Chosenplan: {chosenplan}")
 
+        #Decide what to disable from QEP
         listtochange = []
         self.decidewhattochange(listtochange, chosenplan, planscost, True)
         print(f'listtochange: {listtochange}')
 
+        #While the list of constraints to change, keep looping
         while len(listtochange) >= 1:
             item = listtochange.pop()
+            #Turn off the constraint
             constraintsdict[item] = "off"
+            #Get the plan
             plan = self.getplan(query, constraintsdict)
-            print(f"Alternate Plan: {plan}")
+            #print(f"Alternate Plan: {plan}")
+            #Decide what to change again
             self.decidewhattochange(listtochange, plan, planscost, False)
             allplans.append(plan)
-            #constraintsdict[item] = "on"
-
-        #pprint(planscost)
 
         return allplans, planscost
 
     def decidewhattochange(self, listtochange, masterplan, cost, bestplan=True, first=False):
         jointables = []
 
-        #print(f'decide1')
         if "Plans" in masterplan:
-            #print(f"decide2: {masterplan}")
             for plan in masterplan["Plans"]:
-                #print(f"recursive call: {plan}")
                 temp = self.decidewhattochange(listtochange, plan, cost, bestplan)
-                #print(f'jointable append: {temp}')
                 jointables.append(temp)
 
         if bestplan == True and not 'tables' in cost:
@@ -170,9 +173,7 @@ class DatabaseCursor:
             return f'mj_it_{jointables[0]}_{jointables[1]}'
 
         elif masterplan["Node Type"] == 'Nested Loop':
-            #print("In nested loop")
             condition = self.getnestedloopcond(masterplan)
-            #print(f'NL Condition: {condition}')
             if not condition in cost.keys():
                 print(f"Cannot find condition, likely need swap")
                 cond = condition.lstrip('(').rstrip(')')
@@ -188,6 +189,7 @@ class DatabaseCursor:
         else:
             print(f'Reach Else Masterplan: {masterplan}')
 
+    #Special method to get join condition for nested loop
     def getnestedloopcond(self, plan):
         if "Plans" in plan:
             for plan in plan["Plans"]:

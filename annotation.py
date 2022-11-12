@@ -1,10 +1,7 @@
 from pprint import pprint
 class Annotator:
-    #def __init__(self):
-        #self.iCount = 0
-        #self.stepCount = 0
-
-    def annotate2(self, plancost):
+    #Annotation method, reading from plancost dict
+    def annotate(self, plancost):
         annresult = ""
 
         for x in plancost['tables']:
